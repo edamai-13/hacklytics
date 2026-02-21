@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import logging
+import time
+from pathlib import Path
 from typing import Any
 
 import librosa
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 CHORD_TEMPLATES: dict[str, list[int]] = {
     "C":  [1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
@@ -32,7 +37,81 @@ TRANSITION_DIFFICULTY: dict[str, dict[str, int]] = {
 }
 
 
-def analyze(audio_path: str, hop_length: int = 4096) -> list[dict[str, Any]]:
+def extract_guitar_stem(audio_path: str, output_dir: str | None = None) -> str:
+    """
+    Separate the guitar stem from a mixed audio file using Demucs htdemucs_6s.
+    Returns the path to the extracted guitar stem WAV.
+    Falls back to the original audio_path on any failure so the pipeline never crashes.
+    """
+    try:
+        import torch
+        import torchaudio
+        from demucs.apply import apply_model
+        from demucs.pretrained import get_model
+        from demucs.audio import convert_audio
+
+        t0 = time.time()
+        logger.info("Starting guitar stem extraction for %s", audio_path)
+
+        out_dir = Path(output_dir) if output_dir else Path(audio_path).parent
+        stem_path = out_dir / (Path(audio_path).stem + "_guitar.wav")
+
+        # Load model (cached after first download, ~300 MB).
+        model = get_model("htdemucs_6s")
+        model.eval()
+
+        # Load and resample to model's expected sample rate.
+        wav, sr = torchaudio.load(audio_path)
+        wav = convert_audio(wav, sr, model.samplerate, model.audio_channels)
+        wav = wav.unsqueeze(0)  # add batch dim
+
+        with torch.no_grad():
+            sources = apply_model(model, wav, device="cpu", progress=False)[0]
+
+        # htdemucs_6s stem order: drums, bass, other, vocals, guitar, piano
+        source_names = model.sources
+        if "guitar" not in source_names:
+            logger.warning("htdemucs_6s 'guitar' stem not found. Available: %s", source_names)
+            return audio_path
+
+        guitar_idx = source_names.index("guitar")
+        guitar_wav = sources[guitar_idx]  # (channels, samples)
+
+        torchaudio.save(str(stem_path), guitar_wav, model.samplerate)
+
+        elapsed = time.time() - t0
+        logger.info("Guitar stem extraction complete (%.1fs). Proceeding with chord analysis.", elapsed)
+        return str(stem_path)
+
+    except ImportError:
+        logger.warning("Demucs not installed — skipping source separation. Run: pip install demucs")
+        return audio_path
+    except Exception as exc:
+        logger.warning("Guitar stem extraction failed (%s) — falling back to original audio.", exc)
+        return audio_path
+
+
+def analyze(audio_path: str, hop_length: int = 4096, separate: bool = False) -> list[dict[str, Any]]:
+    stem_path: str | None = None
+    if separate:
+        extracted = extract_guitar_stem(audio_path, output_dir=str(Path(audio_path).parent))
+        # Only use the extracted stem if it's different from the original (i.e. separation succeeded).
+        if extracted != audio_path:
+            stem_path = extracted
+    source = stem_path if stem_path else audio_path
+
+    try:
+        return _run_chord_detection(source, hop_length)
+    finally:
+        # Always clean up the temp stem file.
+        if stem_path:
+            try:
+                Path(stem_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+def _run_chord_detection(audio_path: str, hop_length: int) -> list[dict[str, Any]]:
     y, sr = librosa.load(audio_path, sr=22050)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length)
 
