@@ -1,0 +1,139 @@
+# Claude Code CLI Prompt — Generate CLAUDE.md from Hackathon Spec
+
+Copy the entire block below and paste it into your Claude Code CLI session.
+
+---
+
+## Usage
+
+```bash
+# Option A: Pass as a direct prompt
+claude "$(cat prompt-generate-claude-md.txt)" --print
+
+# Option B: Interactive mode — paste the prompt block below after launching
+claude
+
+# Option C: Pipe in
+cat prompt-generate-claude-md.txt | claude --print
+```
+
+---
+
+## The Prompt
+
+```
+You are a senior engineering lead setting up a hackathon project for execution using Claude Code.
+
+YOUR TASK:
+Read the file `hackathon-spec.md` in this directory. It is the final locked engineering spec for a 16-hour hackathon project called "ChordCoach" — an app that extracts chord progressions from audio and teaches beginner guitarists.
+
+Using that spec as your SOLE source of truth, generate a `CLAUDE.md` file in the project root that will serve as the persistent instruction file for Claude Code throughout the entire build.
+
+REQUIREMENTS FOR THE CLAUDE.md:
+
+1. **Project Overview** (3–4 sentences max)
+   - What the app does, the hackathon constraint (16 hrs), and the core philosophy (demo reliability > feature breadth).
+
+2. **Tech Stack** (exact versions and tools — no ambiguity)
+   - Frontend: framework, key libraries (with versions if specified in spec)
+   - Backend: framework, key libraries
+   - System deps: ffmpeg, etc.
+   - What is explicitly NOT used (no Docker, no DB, no auth, no Celery)
+
+3. **Project Structure** (target directory tree)
+   - Define the folder layout Claude Code should create and maintain. Derive this from the architecture spec. Example:
+     ```
+     /frontend         → Next.js app
+     /backend          → FastAPI app
+     /backend/engine   → chord_engine.py and analysis logic
+     /backend/precomputed → pre-analyzed demo song JSONs
+     /shared           → shared types/contracts if any
+     ```
+   - Be prescriptive. Claude Code should know exactly where every file goes.
+
+4. **Key Files Reference** (critical files Claude Code must know about)
+   - List the most important files and their purpose:
+     - `backend/engine/chord_engine.py` — core chord extraction (spec has full implementation in Appendix A, use it)
+     - `frontend/data/chords.json` — chord diagram data (spec has it in Appendix B, use it verbatim)
+     - `frontend/data/transitions.json` — difficulty matrix (spec has it in Appendix C)
+     - `backend/precomputed/*.json` — cached demo song results
+   - Tell Claude Code: "When creating these files, copy the reference implementations from the spec exactly before modifying."
+
+5. **API Contract** (the 5 endpoints)
+   - List every endpoint with method, route, request format, response format.
+   - State: "This API contract is LOCKED. Do not add, remove, or rename endpoints."
+
+6. **Data Schemas** (paste the exact JSON shapes)
+   - ChordResult schema
+   - ChordDiagram schema
+   - AnalysisJob schema
+   - State: "These schemas are LOCKED. All code must conform to these shapes."
+
+7. **Build Phases & Rules**
+   - Translate the spec's build sequence into Claude Code task instructions:
+     - Phase 0 (Setup): scaffold both apps, install deps, verify ffmpeg/librosa, commit chord data files
+     - Phase 1 (Engine): implement chord_engine.py, wire FastAPI endpoints, pre-compute demo songs
+     - Phase 2 (Core Frontend): upload flow, WaveSurfer, chord timeline
+     - Phase 3 (Fretboard + Practice): SVG fretboard, sync, loop/speed controls
+     - Phase 4 (Polish): UI, error states, demo hardening
+   - Add the rule: "After Phase 3 is complete, NO NEW FEATURES. Only bug fixes and polish."
+
+8. **Coding Standards & Conventions**
+   - Python: type hints on all functions, f-strings, pathlib for file paths
+   - TypeScript/React: functional components only, no class components
+   - Naming: snake_case for Python, camelCase for TypeScript
+   - Error handling: every API endpoint must have try/except with proper HTTP status codes
+   - No console.log in committed frontend code (use a logger or remove)
+   - Every component must handle loading and error states
+
+9. **Critical Constraints** (non-negotiable rules for Claude Code)
+   - "NEVER install or use a database. All persistence is JSON files on disk."
+   - "NEVER add authentication or user accounts."
+   - "NEVER use Celery, Redis, or any external job queue. Use FastAPI BackgroundTasks."
+   - "NEVER use Docker for development."
+   - "NEVER add endpoints beyond the 5 specified in the API contract."
+   - "If chord recognition produces poor results on a file, that is expected. Do not try to fix the algorithm — use precomputed demos for reliability."
+   - "Audio files and result JSONs are stored in /backend/uploads/ and /backend/results/ respectively."
+   - "The 3 precomputed demo songs MUST work perfectly. They are the demo safety net."
+
+10. **Fallback Strategies** (tell Claude Code what to do when things break)
+    - "If WaveSurfer event sync is unreliable, fall back to polling getCurrentTime() every 100ms with setInterval."
+    - "If SVG fretboard is taking too long, switch to static PNG images per chord."
+    - "If librosa chroma gives bad results on a specific song, adjust hop_length (try 2048, 4096, 8192) or switch to chroma_stft."
+    - "If ffmpeg fails on an MP4, return a clear error to the user rather than crashing."
+
+11. **Testing Checkpoints** (how Claude Code should verify its own work)
+    - After Phase 1: "Run `python -c 'from engine.chord_engine import analyze; print(analyze(\"demo.mp3\"))'` and verify it returns a list of chord dicts."
+    - After Phase 2: "Start both servers. Upload an MP3 via the UI. Verify the timeline renders with colored chord blocks."
+    - After Phase 3: "Play a demo song. Verify fretboard updates in sync. Set a loop region and confirm it loops without audio glitches."
+    - After Phase 4: "Run through all 3 demo songs start-to-finish with no errors. Record screen if possible."
+
+12. **Demo Song Configuration**
+    - "The app must ship with 3 pre-analyzed demo songs accessible via `GET /api/demo/{slug}`."
+    - "Demo slugs: `demo-1`, `demo-2`, `demo-3` (team will assign real song files)."
+    - "Precomputed JSON files follow the exact ChordResult schema."
+    - "Demo songs should load instantly with NO processing delay."
+
+FORMAT RULES FOR THE CLAUDE.md:
+- Use markdown headers (##) for each section.
+- Use code blocks for all schemas, directory trees, and commands.
+- Keep it scannable — Claude Code will re-read this file frequently.
+- Total length: 200–350 lines. Dense, no fluff.
+- Do NOT include motivational text, project history, or "nice to have" ideas.
+- This file is an INSTRUCTION MANUAL, not a README.
+
+IMPORTANT:
+- Do NOT invent or assume anything not in hackathon-spec.md.
+- If the spec provides reference code (Appendix A, B, C), embed it or reference it explicitly.
+- The CLAUDE.md must be self-contained — a developer (or Claude Code) reading ONLY this file should be able to build the entire project without referring back to the spec.
+
+OUTPUT: Write the CLAUDE.md file to the project root directory. Nothing else.
+```
+
+---
+
+## Notes
+
+- Place `hackathon-spec.md` in the same directory where you run the command.
+- After generating, review the CLAUDE.md and tweak any project-specific paths or song choices.
+- The generated CLAUDE.md becomes Claude Code's "memory" for the entire project — it reads it at the start of every task.

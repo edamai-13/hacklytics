@@ -1,0 +1,22 @@
+# Node
+frontend/node_modules/
+frontend/.next/
+
+# Python
+backend/__pycache__/
+backend/engine/__pycache__/
+backend/venv/
+*.pyc
+
+# Runtime data (don't commit user uploads/results)
+backend/uploads/*
+backend/results/*
+!backend/uploads/.gitkeep
+!backend/results/.gitkeep
+
+# Keep precomputed demos in git
+!backend/precomputed/
+
+# Env
+.env
+.env.local
