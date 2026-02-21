@@ -1,3 +1,4 @@
+import logging
 import uuid
 import json
 import shutil
@@ -5,6 +6,8 @@ import numpy as np
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 from fastapi import FastAPI, File, UploadFile, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,7 +42,8 @@ MAX_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 def run_analysis(job_id: str, audio_path: Path, original_name: str) -> None:
     jobs[job_id]["status"] = "processing"
     try:
-        chords = analyze(str(audio_path))
+        logging.info("Starting guitar stem extraction for job %s...", job_id)
+        chords = analyze(str(audio_path), separate=True)
         transitions = build_transitions(chords)
         next_chord_predictions = build_next_chord_predictions(chords, top_k=3)
 
