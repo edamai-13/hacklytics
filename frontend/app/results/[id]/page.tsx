@@ -20,23 +20,11 @@ export default function ResultsPage() {
   const [loopRegion, setLoopRegion] = useState<[number, number] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const currentChordIndex = (() => {
-    if (!result) return -1;
-    const chords = result.chords;
-    // Exact match first
-    const exact = chords.findIndex(
-      (c) => currentTime >= c.start && currentTime < c.end
-    );
-    if (exact >= 0) return exact;
-    // Past the last chord — stick to the last one
-    if (currentTime >= chords[chords.length - 1].start) return chords.length - 1;
-    // In a gap — find the chord whose start is closest but not ahead
-    let best = -1;
-    for (let i = 0; i < chords.length; i++) {
-      if (chords[i].start <= currentTime) best = i;
-    }
-    return best;
-  })();
+  const currentChordIndex = result
+    ? result.chords.findIndex(
+        (c) => currentTime >= c.start && currentTime < c.end
+      )
+    : -1;
   const currentChord = currentChordIndex >= 0 ? result!.chords[currentChordIndex] : null;
   const nextChord = currentChordIndex >= 0 ? result!.chords[currentChordIndex + 1] ?? null : null;
 

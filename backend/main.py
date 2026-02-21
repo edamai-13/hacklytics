@@ -10,7 +10,7 @@ from fastapi import FastAPI, File, UploadFile, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-from engine.chord_engine import analyze, build_transitions
+from engine.chord_engine import analyze, build_transitions, build_next_chord_predictions
 
 app = FastAPI(title="ChordCoach API")
 
@@ -41,6 +41,7 @@ def run_analysis(job_id: str, audio_path: Path, original_name: str) -> None:
     try:
         chords = analyze(str(audio_path))
         transitions = build_transitions(chords)
+        next_chord_predictions = build_next_chord_predictions(chords, top_k=3)
 
         import librosa
         y, sr = librosa.load(str(audio_path), sr=22050, duration=None)
@@ -55,6 +56,7 @@ def run_analysis(job_id: str, audio_path: Path, original_name: str) -> None:
             "bpm_estimate": bpm,
             "chords": chords,
             "transitions": transitions,
+            "next_chord_predictions": next_chord_predictions,
         }
 
         result_path = RESULTS / f"{job_id}.json"

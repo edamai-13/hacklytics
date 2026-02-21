@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 import librosa
 import numpy as np
 
@@ -28,7 +32,7 @@ TRANSITION_DIFFICULTY: dict[str, dict[str, int]] = {
 }
 
 
-def analyze(audio_path: str, hop_length: int = 4096) -> list[dict]:
+def analyze(audio_path: str, hop_length: int = 4096) -> list[dict[str, Any]]:
     y, sr = librosa.load(audio_path, sr=22050)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length)
 
@@ -44,7 +48,7 @@ def analyze(audio_path: str, hop_length: int = 4096) -> list[dict]:
 
     times = librosa.frames_to_time(np.arange(len(best_idx)), sr=sr, hop_length=hop_length)
 
-    segments: list[dict] = []
+    segments: list[dict[str, Any]] = []
     current_chord = names[best_idx[0]]
     start = times[0]
     confs = [best_conf[0]]
@@ -75,14 +79,12 @@ def analyze(audio_path: str, hop_length: int = 4096) -> list[dict]:
     return segments
 
 
-def build_transitions(chords: list[dict]) -> list[dict]:
-    transitions: list[dict] = []
+def build_transitions(chords: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    transitions: list[dict[str, Any]] = []
     for i in range(len(chords) - 1):
         from_chord = chords[i]["chord"]
         to_chord = chords[i + 1]["chord"]
-        difficulty = (
-            TRANSITION_DIFFICULTY.get(from_chord, {}).get(to_chord, 3)
-        )
+        difficulty = TRANSITION_DIFFICULTY.get(from_chord, {}).get(to_chord, 3)
         transitions.append({
             "from": from_chord,
             "to": to_chord,
@@ -90,3 +92,24 @@ def build_transitions(chords: list[dict]) -> list[dict]:
             "difficulty": difficulty,
         })
     return transitions
+
+
+def build_next_chord_predictions(
+    chords: list[dict[str, Any]], top_k: int = 3
+) -> dict[str, list[dict[str, Any]]]:
+    counts: dict[str, dict[str, int]] = {}
+    for i in range(len(chords) - 1):
+        cur = chords[i]["chord"]
+        nxt = chords[i + 1]["chord"]
+        counts.setdefault(cur, {})
+        counts[cur][nxt] = counts[cur].get(nxt, 0) + 1
+
+    predictions: dict[str, list[dict[str, Any]]] = {}
+    for chord, next_counts in counts.items():
+        total = sum(next_counts.values())
+        ranked = sorted(next_counts.items(), key=lambda item: item[1], reverse=True)
+        predictions[chord] = [
+            {"chord": nxt, "probability": round(cnt / total, 3)}
+            for nxt, cnt in ranked[:top_k]
+        ]
+    return predictions
